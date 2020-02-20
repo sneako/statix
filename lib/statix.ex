@@ -236,11 +236,11 @@ defmodule Statix do
     current_conn =
       if Keyword.get(opts, :runtime_config, false) do
         quote do
-          @statix_header_key Module.concat(__MODULE__, :__statix_header__)
+          @statix_conn_key Module.concat(__MODULE__, :__statix_conn__)
 
           def connect() do
             conn = Statix.new_conn(__MODULE__)
-            Application.put_env(:statix, @statix_header_key, conn.header)
+            Application.put_env(:statix, @statix_conn_key, conn)
 
             Statix.open_conn(conn)
             :ok
@@ -248,8 +248,7 @@ defmodule Statix do
 
           @compile {:inline, [current_conn: 0]}
           defp current_conn() do
-            header = Application.fetch_env!(:statix, @statix_header_key)
-            %Statix.Conn{header: header, module: __MODULE__}
+            Application.fetch_env!(:statix, @statix_conn_key)
           end
         end
       else
@@ -331,16 +330,20 @@ defmodule Statix do
 
   @doc false
   def new_conn(module) do
-    {host, port, prefix} = load_config(module)
-    conn = Conn.new(host, port)
+    {host, port, prefix, pool_size} = load_config(module)
+    conn = Conn.new(module, host, port, pool_size)
     header = IO.iodata_to_binary([conn.header | prefix])
-    %{conn | header: header, module: module, pool_size: 5}
+    %{conn | header: header, module: module}
   end
 
   @doc false
-  def open_conn(%Conn{module: module} = conn) do
+  def open_conn(%Conn{} = conn) do
     conn = Conn.open(conn)
-    Process.register(conn.sock, module)
+
+    Enum.zip(conn.socks, conn.sock_names)
+    |> Enum.each(fn {sock, name} ->
+      Process.register(sock, name)
+    end)
   end
 
   @doc false
@@ -366,8 +369,9 @@ defmodule Statix do
 
     host = Keyword.get(env, :host, "127.0.0.1")
     port = Keyword.get(env, :port, 8125)
+    pool_size = Keyword.get(env, :pool_size, 1)
     prefix = build_prefix(prefix1, prefix2)
-    {host, port, prefix}
+    {host, port, prefix, pool_size}
   end
 
   defp build_prefix(part1, part2) do
