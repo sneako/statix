@@ -1,7 +1,7 @@
 defmodule Statix.Conn do
   @moduledoc false
 
-  defstruct [:sock, :header]
+  defstruct [:sock, :header, :module, :pool_size]
 
   alias Statix.Packet
 
@@ -22,26 +22,27 @@ defmodule Statix.Conn do
     %__MODULE__{conn | sock: sock}
   end
 
-  def transmit(%__MODULE__{header: header, sock: sock}, type, key, val, options)
+  def transmit(%__MODULE__{header: header, module: module}, type, key, val, options)
       when is_binary(val) and is_list(options) do
     result =
       header
       |> Packet.build(type, key, val, options)
-      |> transmit(sock)
+      |> transmit(module)
 
     if result == {:error, :port_closed} do
       Logger.error(fn ->
-        if(is_atom(sock), do: "", else: "Statix ") <>
-          "#{inspect(sock)} #{type} metric \"#{key}\" lost value #{val}" <> " due to port closure"
+        if(is_atom(module), do: "", else: "Statix ") <>
+          "#{inspect(module)} #{type} metric \"#{key}\" lost value #{val}" <>
+          " due to port closure"
       end)
     end
 
     result
   end
 
-  defp transmit(packet, sock) do
+  defp transmit(packet, module) do
     try do
-      Port.command(sock, packet)
+      Port.command(module, packet)
     rescue
       ArgumentError ->
         {:error, :port_closed}

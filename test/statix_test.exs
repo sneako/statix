@@ -40,7 +40,7 @@ defmodule StatixTest do
       use Statix, runtime_config: unquote(runtime_config?)
 
       def close_port() do
-        %Statix.Conn{sock: sock} = current_conn()
+        %Statix.Conn{module: sock} = current_conn()
         Port.close(sock)
       end
     end

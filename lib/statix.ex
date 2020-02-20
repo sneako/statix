@@ -249,7 +249,7 @@ defmodule Statix do
           @compile {:inline, [current_conn: 0]}
           defp current_conn() do
             header = Application.fetch_env!(:statix, @statix_header_key)
-            %Statix.Conn{header: header, sock: __MODULE__}
+            %Statix.Conn{header: header, module: __MODULE__}
           end
         end
       else
@@ -334,11 +334,11 @@ defmodule Statix do
     {host, port, prefix} = load_config(module)
     conn = Conn.new(host, port)
     header = IO.iodata_to_binary([conn.header | prefix])
-    %{conn | header: header, sock: module}
+    %{conn | header: header, module: module, pool_size: 5}
   end
 
   @doc false
-  def open_conn(%Conn{sock: module} = conn) do
+  def open_conn(%Conn{module: module} = conn) do
     conn = Conn.open(conn)
     Process.register(conn.sock, module)
   end
@@ -349,7 +349,7 @@ defmodule Statix do
     sample_rate = Keyword.get(options, :sample_rate)
 
     if is_nil(sample_rate) or sample_rate >= :rand.uniform() do
-      Conn.transmit(conn, type, key, to_string(val), put_global_tags(conn.sock, options))
+      Conn.transmit(conn, type, key, to_string(val), put_global_tags(conn.module, options))
     else
       :ok
     end
