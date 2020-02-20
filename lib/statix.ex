@@ -266,11 +266,11 @@ defmodule Statix do
     current_conn =
       if Keyword.get(opts, :runtime_config, false) do
         quote do
-          @statix_header_key Module.concat(__MODULE__, :__statix_header__)
+          @statix_conn_key Module.concat(__MODULE__, :__statix_conn__)
 
           def connect() do
             conn = Statix.new_conn(__MODULE__)
-            Application.put_env(:statix, @statix_header_key, conn.header)
+            Application.put_env(:statix, @statix_conn_key, conn)
 
             Statix.open_conn(conn)
             :ok
@@ -278,8 +278,8 @@ defmodule Statix do
 
           @compile {:inline, [current_conn: 0]}
           defp current_conn() do
-            header = Application.fetch_env!(:statix, @statix_header_key)
-            %Statix.Conn{header: header, sock: __MODULE__}
+            conn = Application.fetch_env!(:statix, @statix_conn_key)
+            %{conn | sock: __MODULE__}
           end
         end
       else

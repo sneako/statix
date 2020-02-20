@@ -1,15 +1,15 @@
 defmodule Statix.Conn do
   @moduledoc false
 
-  defstruct [:sock, :header, :type]
+  defstruct [:sock, :type, :path, header: []]
 
   alias Statix.Packet
 
   require Logger
 
   def new(:local, path) do
-    header = Packet.header(:local, path)
-    %__MODULE__{header: header, type: :local}
+    %__MODULE__{type: :local, path: path}
+    |> IO.inspect()
   end
 
   def new(host, port) when is_binary(host) do
@@ -18,7 +18,7 @@ defmodule Statix.Conn do
 
   def new(host, port) when is_list(host) or is_tuple(host) do
     {:ok, addr} = :inet.getaddr(host, :inet)
-    header = Packet.header(:inet, addr, port)
+    header = Packet.header(addr, port)
     %__MODULE__{header: header, type: :inet}
   end
 
@@ -32,12 +32,12 @@ defmodule Statix.Conn do
     %__MODULE__{conn | sock: sock}
   end
 
-  def transmit(%__MODULE__{header: header, sock: sock}, type, key, val, options)
+  def transmit(%__MODULE__{header: header, sock: sock} = conn, type, key, val, options)
       when is_binary(val) and is_list(options) do
     result =
       header
       |> Packet.build(type, key, val, options)
-      |> transmit(sock)
+      |> transmit(conn)
 
     if result == {:error, :port_closed} do
       Logger.error(fn ->
@@ -49,7 +49,13 @@ defmodule Statix.Conn do
     result
   end
 
-  defp transmit(packet, sock) do
+  defp transmit(packet, %{type: :local, path: path, sock: sock}) do
+    sock
+    |> Process.whereis()
+    |> :gen_udp.send({:local, path}, 0, packet)
+  end
+
+  defp transmit(packet, %{sock: sock}) do
     try do
       Port.command(sock, packet)
     rescue
