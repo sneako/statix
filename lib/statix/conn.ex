@@ -1,23 +1,27 @@
 defmodule Statix.Conn do
   @moduledoc false
 
-  defstruct [:sock, :address, :port, :prefix]
+  defstruct [:sock, :address, :port, :prefix, :socket_opts]
 
   alias Statix.Packet
 
   require Logger
 
-  otp_release = :erlang.system_info(:otp_release)
-  @otp_gte_26 otp_release >= ~c"26"
+  def new(host, port, prefix, socket_opts \\ [])
 
-  def new(host, port, prefix) when is_binary(host) do
-    new(String.to_charlist(host), port, prefix)
+  def new(host, port, prefix, socket_opts) when is_binary(host) do
+    new(String.to_charlist(host), port, prefix, socket_opts)
   end
 
-  def new(host, port, prefix) when is_list(host) or is_tuple(host) do
+  def new(host, port, prefix, socket_opts) when is_list(host) or is_tuple(host) do
     case :inet.getaddr(host, :inet) do
       {:ok, address} ->
-        %__MODULE__{address: address, port: port, prefix: prefix}
+        %__MODULE__{
+          address: address,
+          port: port,
+          prefix: prefix,
+          socket_opts: socket_opts
+        }
 
       {:error, reason} ->
         raise(
@@ -27,13 +31,13 @@ defmodule Statix.Conn do
     end
   end
 
-  def open(%__MODULE__{} = conn) do
-    {:ok, sock} = :gen_udp.open(0, active: false)
+  def open(%__MODULE__{socket_opts: socket_opts} = conn) do
+    {:ok, sock} = :gen_udp.open(0, Keyword.merge([active: false], socket_opts))
     %__MODULE__{conn | sock: sock}
   end
 
   def transmit(%__MODULE__{sock: sock, prefix: prefix} = conn, type, key, val, options)
-      when is_binary(val) and is_list(options) do
+      when (is_binary(val) or is_list(val)) and is_list(options) do
     result =
       prefix
       |> Packet.build(type, key, val, options)
@@ -53,30 +57,10 @@ defmodule Statix.Conn do
   defp transmit(packet, %__MODULE__{address: address, port: port, sock: sock_name}) do
     sock = Process.whereis(sock_name)
 
-    # The check below was implemented for backwards compatibility to avoid a performance issue on
-    # OTP on versiones older than 26. If the OTP version is 26 or above, we use gen_udp.send/4. If
-    # the version is older than that, we use the existing performance issue workaround.
-    if @otp_gte_26 do
-      if sock do
-        :gen_udp.send(sock, address, port, packet)
-      else
-        {:error, :port_closed}
-      end
+    if sock do
+      :gen_udp.send(sock, address, port, packet)
     else
-      # This branch will only be executed on older version of OTP and will be eventually removed.
-      packet_with_header = Packet.add_header(packet, address, port)
-
-      try do
-        Port.command(sock, packet_with_header)
-      rescue
-        ArgumentError ->
-          {:error, :port_closed}
-      else
-        true ->
-          receive do
-            {:inet_reply, _port, status} -> status
-          end
-      end
+      {:error, :port_closed}
     end
   end
 end

@@ -1,11 +1,7 @@
 defmodule Statix.OverridingTest do
-  @server_port 8225
+  use Statix.TestCase
 
-  use Statix.TestCase, port: @server_port
-
-  Application.put_env(:statix, __MODULE__, port: @server_port)
-
-  use Statix
+  use Statix, runtime_config: true
 
   def increment(key, value, options) do
     super([key, "-overridden"], value, options)
@@ -35,8 +31,8 @@ defmodule Statix.OverridingTest do
     super([key, "-overridden"], value, options)
   end
 
-  setup do
-    connect()
+  setup context do
+    connect(port: context[:statix_port])
   end
 
   test "increment/3" do

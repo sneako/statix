@@ -5,13 +5,13 @@ ExUnit.start()
 defmodule Statix.TestCase do
   use ExUnit.CaseTemplate
 
-  using options do
-    port = Keyword.get(options, :port, 8125)
-
+  using _options do
     quote do
       setup_all do
-        {:ok, _} = Statix.TestServer.start_link(unquote(port), __MODULE__.Server)
-        :ok
+        {:ok, _pid} = Statix.TestServer.start_link(0, __MODULE__.Server)
+        port = Statix.TestServer.port(__MODULE__.Server)
+        Application.put_env(:statix, :port, port)
+        {:ok, [statix_port: port]}
       end
 
       setup do

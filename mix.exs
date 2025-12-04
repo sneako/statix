@@ -8,7 +8,8 @@ defmodule Statix.Mixfile do
     [
       app: :statix,
       version: @version,
-      elixir: "~> 1.3",
+      elixir: "~> 1.17",
+      elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
 
       # Hex
@@ -17,17 +18,24 @@ defmodule Statix.Mixfile do
 
       # Docs
       name: "Statix",
-      docs: docs()
+      docs: docs(),
+      config_path: "config/config.exs"
     ]
   end
 
   def application() do
-    [applications: [:logger]]
+    [applications: [:logger] ++ applications(Mix.env())]
   end
+
+  defp applications(:dev), do: [:benchee]
+  defp applications(_), do: []
 
   defp description() do
     "Fast and reliable Elixir client for StatsD-compatible servers."
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   defp package() do
     [
@@ -38,7 +46,10 @@ defmodule Statix.Mixfile do
   end
 
   defp deps() do
-    [{:ex_doc, "~> 0.20.0", only: :dev}]
+    [
+      {:ex_doc, "~> 0.20.0", only: :dev},
+      {:benchee, "~> 1.0", only: :dev}
+    ]
   end
 
   defp docs() do

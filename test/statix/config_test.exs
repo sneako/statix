@@ -37,4 +37,8 @@ defmodule Statix.ConfigTest do
   after
     Application.delete_env(:statix, __MODULE__)
   end
+
+  test "socket options" do
+    assert catch_exit(connect(socket_opts: [active: :invalid])) == :badarg
+  end
 end

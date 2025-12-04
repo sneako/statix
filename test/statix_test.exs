@@ -10,14 +10,21 @@ defmodule StatixTest do
   defp close_port() do
     %{pool: pool} = current_statix()
 
-    Enum.each(pool, fn module_name ->
+    pool_list =
+      if is_tuple(pool) do
+        Tuple.to_list(pool)
+      else
+        [pool]
+      end
+
+    Enum.each(pool_list, fn module_name ->
       sock = Process.whereis(module_name)
       :gen_udp.close(sock)
     end)
   end
 
-  setup do
-    connect()
+  setup context do
+    connect(port: context[:statix_port])
   end
 
   test "increment/1,2,3" do
