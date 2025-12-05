@@ -269,9 +269,8 @@ defmodule Statix do
 
           def connect(options \\ []) do
             statix = Statix.new(__MODULE__, options)
-            Application.put_env(:statix, @statix_key, statix)
-
-            Statix.open(statix)
+            pool = Statix.open(statix)
+            Application.put_env(:statix, @statix_key, %{statix | pool: pool})
             :ok
           end
 
@@ -378,17 +377,20 @@ defmodule Statix do
 
   @doc false
   def open(%__MODULE__{conn: conn, pool: pool}) do
-    pool_list =
-      if is_tuple(pool) do
-        Tuple.to_list(pool)
-      else
-        [pool]
-      end
+    if is_tuple(pool) do
+      pool
+      |> Tuple.to_list()
+      |> Enum.map(fn name -> open_and_register(conn, name) end)
+      |> List.to_tuple()
+    else
+      open_and_register(conn, pool)
+    end
+  end
 
-    Enum.each(pool_list, fn name ->
-      %{sock: sock} = Conn.open(conn)
-      Process.register(sock, name)
-    end)
+  defp open_and_register(conn, name) do
+    %{sock: sock} = Conn.open(conn)
+    if is_atom(name), do: Process.register(sock, name)
+    sock
   end
 
   @doc false
@@ -415,7 +417,7 @@ defmodule Statix do
   defp to_iodata(val) when is_number(val), do: to_string(val)
   defp to_iodata(val), do: val
 
-  defp pick_name(name) when is_atom(name), do: name
+  defp pick_name(name) when is_atom(name) or is_port(name), do: name
   defp pick_name(pool), do: elem(pool, :rand.uniform(tuple_size(pool)) - 1)
 
   defp get_config(module, overrides) do

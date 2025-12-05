@@ -18,7 +18,7 @@ defmodule StatixTest do
       end
 
     Enum.each(pool_list, fn module_name ->
-      sock = Process.whereis(module_name)
+      sock = if is_port(module_name), do: module_name, else: Process.whereis(module_name)
       :gen_udp.close(sock)
     end)
   end
@@ -166,23 +166,28 @@ defmodule StatixTest do
     close_port()
 
     assert capture_log(fn ->
-             assert {:error, :port_closed} == increment("sample")
-           end) =~ "counter metric \"sample\" lost value 1 error=:port_closed\n\e[0m"
+             assert {:error, reason} = increment("sample")
+             assert reason in [:port_closed, :closed]
+           end) =~ "counter metric \"sample\" lost value 1 error="
 
     assert capture_log(fn ->
-             assert {:error, :port_closed} == decrement("sample")
-           end) =~ "counter metric \"sample\" lost value -1 error=:port_closed\n\e[0m"
+             assert {:error, reason} = decrement("sample")
+             assert reason in [:port_closed, :closed]
+           end) =~ "counter metric \"sample\" lost value -1 error="
 
     assert capture_log(fn ->
-             assert {:error, :port_closed} == gauge("sample", 2)
-           end) =~ "gauge metric \"sample\" lost value 2 error=:port_closed\n\e[0m"
+             assert {:error, reason} = gauge("sample", 2)
+             assert reason in [:port_closed, :closed]
+           end) =~ "gauge metric \"sample\" lost value 2 error="
 
     assert capture_log(fn ->
-             assert {:error, :port_closed} == histogram("sample", 3)
-           end) =~ "histogram metric \"sample\" lost value 3 error=:port_closed\n\e[0m"
+             assert {:error, reason} = histogram("sample", 3)
+             assert reason in [:port_closed, :closed]
+           end) =~ "histogram metric \"sample\" lost value 3 error="
 
     assert capture_log(fn ->
-             assert {:error, :port_closed} == timing("sample", 2.5)
-           end) =~ "timing metric \"sample\" lost value 2.5 error=:port_closed\n\e[0m"
+             assert {:error, reason} = timing("sample", 2.5)
+             assert reason in [:port_closed, :closed]
+           end) =~ "timing metric \"sample\" lost value 2.5 error="
   end
 end

@@ -54,8 +54,13 @@ defmodule Statix.Conn do
     result
   end
 
-  defp transmit(packet, %__MODULE__{address: address, port: port, sock: sock_name}) do
-    sock = Process.whereis(sock_name)
+  defp transmit(packet, %__MODULE__{address: address, port: port, sock: sock_or_name}) do
+    sock =
+      if is_port(sock_or_name) do
+        sock_or_name
+      else
+        Process.whereis(sock_or_name)
+      end
 
     if sock do
       :gen_udp.send(sock, address, port, packet)
