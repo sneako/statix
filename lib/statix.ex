@@ -270,14 +270,14 @@ defmodule Statix do
           def connect(options \\ []) do
             statix = Statix.new(__MODULE__, options)
             pool = Statix.open(statix)
-            Application.put_env(:statix, @statix_key, %{statix | pool: pool})
+            :persistent_term.put(@statix_key, %{statix | pool: pool})
             :ok
           end
 
           @compile {:inline, [current_statix: 0]}
 
           defp current_statix() do
-            Application.fetch_env!(:statix, @statix_key)
+            :persistent_term.get(@statix_key)
           end
         end
       else
