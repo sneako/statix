@@ -254,12 +254,12 @@ defmodule Statix do
       "123"
 
   """
-  @callback measure(key, options, function :: (() -> result)) :: result when result: var
+  @callback measure(key, options, function :: (-> result)) :: result when result: var
 
   @doc """
   Same as `measure(key, [], function)`.
   """
-  @callback measure(key, function :: (() -> result)) :: result when result: var
+  @callback measure(key, function :: (-> result)) :: result when result: var
 
   defmacro __using__(opts) do
     current_statix =
@@ -269,16 +269,15 @@ defmodule Statix do
 
           def connect(options \\ []) do
             statix = Statix.new(__MODULE__, options)
-            Application.put_env(:statix, @statix_key, statix)
-
-            Statix.open(statix)
+            pool = Statix.open(statix)
+            :persistent_term.put(@statix_key, %{statix | pool: pool})
             :ok
           end
 
           @compile {:inline, [current_statix: 0]}
 
           defp current_statix() do
-            Application.fetch_env!(:statix, @statix_key)
+            :persistent_term.get(@statix_key)
           end
         end
       else
@@ -359,28 +358,39 @@ defmodule Statix do
   @doc false
   def new(module, options) do
     config = get_config(module, options)
-    conn = Conn.new(config.host, config.port)
-    header = IO.iodata_to_binary([conn.header | config.prefix])
+    conn = Conn.new(config.host, config.port, config.prefix, config.socket_opts)
 
     %__MODULE__{
-      conn: %{conn | header: header},
+      conn: conn,
       pool: build_pool(module, config.pool_size),
       tags: config.tags
     }
   end
 
-  defp build_pool(module, 1), do: [module]
+  defp build_pool(module, 1), do: module
 
   defp build_pool(module, size) do
-    Enum.map(1..size, &:"#{module}-#{&1}")
+    1..size
+    |> Enum.map(&:"#{module}-#{&1}")
+    |> List.to_tuple()
   end
 
   @doc false
   def open(%__MODULE__{conn: conn, pool: pool}) do
-    Enum.each(pool, fn name ->
-      %{sock: sock} = Conn.open(conn)
-      Process.register(sock, name)
-    end)
+    if is_tuple(pool) do
+      pool
+      |> Tuple.to_list()
+      |> Enum.map(fn name -> open_and_register(conn, name) end)
+      |> List.to_tuple()
+    else
+      open_and_register(conn, pool)
+    end
+  end
+
+  defp open_and_register(conn, name) do
+    %{sock: sock} = Conn.open(conn)
+    if is_atom(name), do: Process.register(sock, name)
+    sock
   end
 
   @doc false
@@ -398,14 +408,17 @@ defmodule Statix do
       options = put_global_tags(options, tags)
 
       %{conn | sock: pick_name(pool)}
-      |> Conn.transmit(type, key, to_string(value), options)
+      |> Conn.transmit(type, key, to_iodata(value), options)
     else
       :ok
     end
   end
 
-  defp pick_name([name]), do: name
-  defp pick_name(pool), do: Enum.random(pool)
+  defp to_iodata(val) when is_number(val), do: to_string(val)
+  defp to_iodata(val), do: val
+
+  defp pick_name(name) when is_atom(name) or is_port(name), do: name
+  defp pick_name(pool), do: elem(pool, :rand.uniform(tuple_size(pool)) - 1)
 
   defp get_config(module, overrides) do
     {module_env, global_env} =
@@ -426,7 +439,8 @@ defmodule Statix do
       host: Keyword.get(options, :host, "127.0.0.1"),
       port: Keyword.get(options, :port, 8125),
       pool_size: Keyword.get(options, :pool_size, 1),
-      tags: tags
+      tags: tags,
+      socket_opts: Keyword.get(options, :socket_opts, [])
     }
   end
 

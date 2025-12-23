@@ -5,10 +5,21 @@ defmodule Statix.TestServer do
     GenServer.start_link(__MODULE__, port, name: test_module)
   end
 
+  def port(server) do
+    GenServer.call(server, :get_port)
+  end
+
   @impl true
   def init(port) do
     {:ok, socket} = :gen_udp.open(port, [:binary, active: true])
-    {:ok, %{socket: socket, test: nil}}
+    {:ok, bound_port} = :inet.port(socket)
+    Process.flag(:trap_exit, true)
+    {:ok, %{socket: socket, test: nil, port: bound_port}}
+  end
+
+  @impl true
+  def handle_call(:get_port, _from, %{port: port} = state) do
+    {:reply, port, state}
   end
 
   @impl true
@@ -21,10 +32,20 @@ defmodule Statix.TestServer do
   end
 
   @impl true
+  def handle_info({:EXIT, _pid, reason}, state) do
+    {:stop, reason, state}
+  end
+
+  @impl true
   def handle_info({:udp, socket, host, port, packet}, %{socket: socket, test: test} = state) do
     metadata = %{host: host, port: port, socket: socket}
     send(test, {:test_server, metadata, packet})
     {:noreply, state}
+  end
+
+  @impl true
+  def terminate(_reason, %{socket: socket}) do
+    :gen_udp.close(socket)
   end
 
   def setup(test_module) do

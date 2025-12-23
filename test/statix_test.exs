@@ -9,11 +9,22 @@ defmodule StatixTest do
 
   defp close_port() do
     %{pool: pool} = current_statix()
-    Enum.each(pool, &Port.close/1)
+
+    pool_list =
+      if is_tuple(pool) do
+        Tuple.to_list(pool)
+      else
+        [pool]
+      end
+
+    Enum.each(pool_list, fn module_name ->
+      sock = if is_port(module_name), do: module_name, else: Process.whereis(module_name)
+      :gen_udp.close(sock)
+    end)
   end
 
-  setup do
-    connect()
+  setup context do
+    connect(port: context[:statix_port])
   end
 
   test "increment/1,2,3" do
@@ -155,23 +166,28 @@ defmodule StatixTest do
     close_port()
 
     assert capture_log(fn ->
-             assert {:error, :port_closed} == increment("sample")
-           end) =~ "counter metric \"sample\" lost value 1 due to port closure"
+             assert {:error, reason} = increment("sample")
+             assert reason in [:port_closed, :closed]
+           end) =~ "counter metric \"sample\" lost value 1 error="
 
     assert capture_log(fn ->
-             assert {:error, :port_closed} == decrement("sample")
-           end) =~ "counter metric \"sample\" lost value -1 due to port closure"
+             assert {:error, reason} = decrement("sample")
+             assert reason in [:port_closed, :closed]
+           end) =~ "counter metric \"sample\" lost value -1 error="
 
     assert capture_log(fn ->
-             assert {:error, :port_closed} == gauge("sample", 2)
-           end) =~ "gauge metric \"sample\" lost value 2 due to port closure"
+             assert {:error, reason} = gauge("sample", 2)
+             assert reason in [:port_closed, :closed]
+           end) =~ "gauge metric \"sample\" lost value 2 error="
 
     assert capture_log(fn ->
-             assert {:error, :port_closed} == histogram("sample", 3)
-           end) =~ "histogram metric \"sample\" lost value 3 due to port closure"
+             assert {:error, reason} = histogram("sample", 3)
+             assert reason in [:port_closed, :closed]
+           end) =~ "histogram metric \"sample\" lost value 3 error="
 
     assert capture_log(fn ->
-             assert {:error, :port_closed} == timing("sample", 2.5)
-           end) =~ "timing metric \"sample\" lost value 2.5 due to port closure"
+             assert {:error, reason} = timing("sample", 2.5)
+             assert reason in [:port_closed, :closed]
+           end) =~ "timing metric \"sample\" lost value 2.5 error="
   end
 end
