@@ -36,6 +36,15 @@ What makes Statix the fastest library around:
 
 See [the documentation](https://hexdocs.pm/statix) for detailed usage information.
 
+# Differences compared to upstream
+
+This fork keeps the public API intact but applies a few performance-oriented changes:
+
+  * uses `:persistent_term` for per-module Statix state to avoid `Application` env lookups on the hot path
+  * stores the pool as a tuple and keeps opened UDP ports in the pool to avoid `Process.whereis/1` per send and enable O(1) random selection
+  * keeps tag/value payloads as IO data (using `Enum.intersperse/2` for tags) to reduce binary allocations during packet assembly
+  * targets modern OTP/Elixir by dropping the legacy pre-OTP-26 UDP send workaround (no `Packet.add_header/3` + `Port.command/2`) and bumping the minimum Elixir version to `~> 1.17`
+
 ## Installation
 
 Add Statix as a dependency to your `mix.exs` file:
